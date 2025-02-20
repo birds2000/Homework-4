@@ -1,0 +1,180 @@
+---
+title: "Homework 4"
+author: "Bird Smith -- kbs2529"
+date: "2025-02-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+[Github Link](https://https://github.com/birds2000/Homework-4)
+
+```{r, include=FALSE}
+#Download necessary packages
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, error = FALSE)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+library(stringr)
+library(mosaic)
+```
+
+## Problem 1 -- Iron Bank
+
+
+```{r, echo=FALSE}
+#Set up values based on question
+runs <- 100000 #Number of Monte Carlo simulations
+trades <- 2021 #Number of trades observed
+obs_flagged <- 70 #Number of real flagged trades
+baseline <- 0.024 #SEC's baseline rate
+
+set.seed(123) #For reproducibility
+
+simulated_flags <- replicate(runs, {
+  sum(runif(trades) < baseline)
+})
+
+#Create p-value (the proportion of sims with flagged greater or equal to obs)
+p_value <- mean(simulated_flags >= obs_flagged)
+
+#Print results
+cat("P-value =", p_value, "\n\n")
+
+#Make a histogram
+hist(simulated_flags, breaks = 50, main = "Distribution of Flagged Trades under Null Hyp.", xlab = "Number of Flagged Trades", col = "skyblue")
+abline(v = obs_flagged, col = "red", lwd = 2)
+```
+
+## Problem 2 -- Health Inspections
+
+
+```{r, echo=FALSE}
+total_inspect    <- 1500  #Total city inspections (not directly needed in the simulation)
+gourmet_inspect  <- 50    #Number of Gourmet Bites inspections
+obs_violations   <- 8     #Observed violations at Gourmet Bites
+baseline         <- 0.03  #3% baseline violation rate
+runs            <- 100000 #Number of Monte Carlo simulations
+
+set.seed(456) # For reproducibility
+
+simulated_violations <- replicate(runs, {
+  #Generate 50 uniform (0,1) draws for 50 inspections
+  #Check how many are < 0.03 (flagged for violation)
+  sum(runif(gourmet_inspect) < baseline)
+})
+
+#p-value: proportion of simulations with violations >= observed
+p_value <- mean(simulated_violations >= obs_violations)
+
+#Print results
+cat("P-value =", p_value, "\n\n")
+
+#Create histogram of simulated violation counts
+hist(simulated_violations, 
+     breaks = 20, 
+     main = "Distribution of Violations under Null Hypothesis",
+     xlab = "Number of Violations", 
+     col = "lightgreen")
+abline(v = obs_violations, col = "red", lwd = 2)
+```
+
+## Problem 3 -- Evaluating Jury Selection for Bias
+
+
+```{r, echo=FALSE}
+obs_counts <- c(85, 56, 59, 27, 13)
+expected_prop <- c(0.30, 0.25, 0.20, 0.15, 0.10)
+
+total_jurors <- sum(obs_counts)
+expected_counts <- expected_prop * total_jurors
+
+#Compute Chi-Square statistic
+chisq_val <- sum((obs_counts - expected_counts)^2 / expected_counts)
+
+#Compute degrees of freedom
+df <- length(obs_counts) - 1
+
+#P-value from chisq distribution
+p_value <- 1 - pchisq(chisq_val, df)
+p_value <- round(p_value, 3)
+
+#Print results
+cat("Chi-Squared statistic =", chisq_val, "\n")
+cat("Degrees of freedom =", df, "\n")
+cat("P-value =", p_value, "\n\n")
+```
+
+## Problem 4 -- LLM Watermarking
+
+
+**Part A**
+
+```{r, echo=FALSE} 
+#Import the data sets
+letter_frequencies <- read.csv("letter_frequencies.csv")
+brown_sentences <- readLines("brown_sentences.txt")
+
+calculate_chi_squared <- function(sentence, freq_table) {
+  #Make sure freq_table is normalized
+  freq_copy <- freq_table
+  freq_copy$Probability <- freq_copy$Probability / sum(freq_copy$Probability)
+  
+  #Remove non-letters and convert to uppercase
+  clean_sentence <- gsub("[^A-Za-z]", "", sentence)
+  clean_sentence <- toupper(clean_sentence)
+  
+  #Fix empty strings
+  if (nchar(clean_sentence) == 0) {
+    return(NA)
+  }
+  
+  observed_counts <- table(factor(strsplit(clean_sentence, "")[[1]],
+                                  levels = freq_copy$Letter))
+  total_letters <- sum(observed_counts)
+  expected_counts <- total_letters * freq_copy$Probability
+  
+  #Chi-squared
+  chi_squared_stat <- sum((observed_counts - expected_counts)^2 / expected_counts)
+  return(chi_squared_stat)
+}
+
+#Compute chi-squared across all Brown sentences
+brown_chi_sq <- sapply(brown_sentences, calculate_chi_squared, freq_table = letter_frequencies)
+
+hist(brown_chi_sq, breaks = 50,
+     main = "Chi-Squared Dist. for Brown Corpus Sentences",
+     xlab = "Chi-Squared Statistic", col = "lightpink")
+```
+
+**Part B**
+
+
+```{r, echo=FALSE}
+test_sentences <- c(
+  "She opened the book and started to read the first chapter, eagerly anticipating what might come next.",
+  "Despite the heavy rain, they decided to go for a long walk in the park, crossing the main avenue by the fountain in the center.",
+  "The museum’s new exhibit features ancient artifacts from various civilizations around the world.",
+  "He carefully examined the document, looking for any clues that might help solve the mystery.",
+  "The students gathered in the auditorium to listen to the guest speaker’s inspiring lecture.",
+  "Feeling vexed after an arduous and zany day at work, she hoped for a peaceful and quiet evening at home, cozying up after a quick dinner with some TV, or maybe a book on her upcoming visit to Auckland.",
+  "The chef demonstrated how to prepare a delicious meal using only locally sourced ingredients, focusing mainly on some excellent dinner recipes from Spain.",
+  "They watched the sunset from the hilltop, marveling at the beautiful array of colors in the sky.",
+  "The committee reviewed the proposal and provided many points of useful feedback to improve the project’s effectiveness.",
+  "Despite the challenges faced during the project, the team worked tirelessly to ensure its successful completion, resulting in a product that exceeded everyone’s expectations."
+)
+
+test_chisq <- sapply(test_sentences, calculate_chi_squared, freq_table = letter_frequencies)
+
+p_values <- sapply(test_chisq, function(x) {
+  mean(brown_chi_sq >= x, na.rm = TRUE)  # Right-tailed
+})
+
+#Create a data frame to show sentences
+results <- data.frame(
+  Sentence = 1:10,
+  p_value  = round(p_values, 3)
+)
+
+print(results)
+```
